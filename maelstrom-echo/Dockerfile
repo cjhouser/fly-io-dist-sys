@@ -13,9 +13,10 @@ RUN dnf -y install \
     graphviz-go-9.0.0-11.fc40 \
     gnuplot-5.4.9-3.fc40 \
     && dnf clean all
-RUN curl --remote-header-name --location --output maelstrom.tar.bz2 https://github.com/jepsen-io/maelstrom/releases/download/v0.2.3/maelstrom.tar.bz2 \
+RUN curl --remote-header-name --location --output maelstrom.tar.bz2 \
+    https://github.com/jepsen-io/maelstrom/releases/download/v0.2.3/maelstrom.tar.bz2 \
     && tar --extract --verbose --bzip2 --file maelstrom.tar.bz2 \
     && rm maelstrom.tar.bz2
 WORKDIR /maelstrom
 COPY --from=build /build/node /maelstrom/node
-ENTRYPOINT [ "./maelstrom" ]
+CMD [ "./maelstrom" ]

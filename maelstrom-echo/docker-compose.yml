@@ -1,5 +1,15 @@
 services:
-  maelstrom:
+  cli:
     build:
       context: .
-    command: test -w echo --bin /maelstrom/node --node-count 1 --time-limit 10
+    volumes:
+    - store:/maelstrom/store
+    command: tail -f /dev/null
+  server:
+    build:
+      context: .
+    volumes:
+    - store:/maelstrom/store
+    command: ./maelstrom serve
+volumes:
+  store:
