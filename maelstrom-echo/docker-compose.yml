@@ -1,0 +1,5 @@
+services:
+  maelstrom:
+    build:
+      context: .
+    command: test -w echo --bin /maelstrom/node --node-count 1 --time-limit 10
