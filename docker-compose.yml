@@ -3,13 +3,17 @@ services:
     build:
       context: .
     volumes:
-    - store:/maelstrom/store
+    - type: volume
+      source: store
+      target: /maelstrom/store
     command: tail -f /dev/null
   server:
     build:
       context: .
     volumes:
-    - store:/maelstrom/store
+    - type: volume
+      source: store
+      target: /maelstrom/store
     command: ./maelstrom serve
 volumes:
   store:
