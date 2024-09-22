@@ -63,6 +63,82 @@ func main() {
 		return n.Reply(msg, body)
 	})
 
+	// Broadcast
+	type broadcastBody struct {
+		Type     string              `json:"type"`
+		Message  int                 `json:"message,omitempty"`
+		Messages []int               `json:"messages,omitempty"`
+		Topology map[string][]string `json:"topology,omitempty"`
+	}
+
+	// Use a "set" for quick lookups
+	var broadcastMutex sync.Mutex
+	var broadcastNeighbors []string
+	broadcastSeen := map[int]struct{}{} // empty structs use no memory
+
+	n.Handle("broadcast", func(msg maelstrom.Message) error {
+		var body broadcastBody
+		if err := json.Unmarshal(msg.Body, &body); err != nil {
+			return err
+		}
+
+		broadcastMutex.Lock()
+		if _, seen := broadcastSeen[body.Message]; !seen {
+			broadcastSeen[body.Message] = struct{}{}
+		}
+		broadcastMutex.Unlock()
+
+		for _, neighbor := range broadcastNeighbors {
+			n.Send(neighbor, body)
+		}
+
+		responseBody := broadcastBody{
+			Type: "broadcast_ok",
+		}
+
+		return n.Reply(msg, responseBody)
+	})
+
+	n.Handle("read", func(msg maelstrom.Message) error {
+		var body broadcastBody
+		if err := json.Unmarshal(msg.Body, &body); err != nil {
+			return err
+		}
+
+		broadcastMutex.Lock()
+		seenMessages := make([]int, len(broadcastSeen))
+		i := 0
+		for message := range broadcastSeen {
+			seenMessages[i] = message
+			i++
+		}
+		broadcastMutex.Unlock()
+
+		responseBody := broadcastBody{
+			Type:     "read_ok",
+			Messages: seenMessages,
+		}
+
+		return n.Reply(msg, responseBody)
+	})
+
+	n.Handle("topology", func(msg maelstrom.Message) error {
+		var body broadcastBody
+		if err := json.Unmarshal(msg.Body, &body); err != nil {
+			return err
+		}
+
+		broadcastMutex.Lock()
+		broadcastNeighbors = body.Topology[n.ID()]
+		broadcastMutex.Unlock()
+
+		responseBody := broadcastBody{
+			Type: "topology_ok",
+		}
+
+		return n.Reply(msg, responseBody)
+	})
+
 	if err := n.Run(); err != nil {
 		log.Fatal(err)
 	}
