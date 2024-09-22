@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math/rand/v2"
 	"net/http"
@@ -62,6 +63,10 @@ func main() {
 			retries--
 
 			resp.Body.Close()
+		}
+
+		if retry && retries < 1 {
+			return fmt.Errorf("could not generate ID")
 		}
 
 		body["type"] = "generate_ok"

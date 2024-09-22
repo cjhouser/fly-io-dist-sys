@@ -29,7 +29,7 @@ func uidClosure() func(http.ResponseWriter, *http.Request) {
 		var uid Uid
 		err := json.NewDecoder(r.Body).Decode(&uid)
 		if err != nil {
-			fmt.Printf("failed to decode payload: %v", err)
+			fmt.Printf("failed to decode payload: %v\n", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -39,7 +39,7 @@ func uidClosure() func(http.ResponseWriter, *http.Request) {
 		sharedUidStorage.mutex.Unlock()
 
 		if collision {
-			fmt.Printf("failed collision check")
+			fmt.Println("failed collision check")
 			http.Error(w, "conflict", http.StatusConflict)
 			return
 		}
@@ -47,7 +47,6 @@ func uidClosure() func(http.ResponseWriter, *http.Request) {
 		sharedUidStorage.mutex.Lock()
 		sharedUidStorage.uids[uid.Uid] = struct{}{}
 		sharedUidStorage.mutex.Unlock()
-
 	}
 }
 
