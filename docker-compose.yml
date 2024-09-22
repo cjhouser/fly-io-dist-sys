@@ -1,7 +1,7 @@
 services:
   cli:
     build:
-      context: .
+     context: .
     volumes:
     - type: volume
       source: store
@@ -15,5 +15,11 @@ services:
       source: store
       target: /maelstrom/store
     command: ./maelstrom serve
+    ports:
+    - 8080:8080
+  uid-storage:
+    build:
+      context: ./uid-storage
+  # need a network for containers
 volumes:
   store:

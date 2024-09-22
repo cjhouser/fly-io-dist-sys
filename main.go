@@ -1,11 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"log"
+	"math/rand/v2"
+	"net/http"
 
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
+
+type Uid struct {
+	Uid int `json:"uid"`
+}
 
 func main() {
 	n := maelstrom.NewNode()
@@ -26,17 +33,31 @@ func main() {
 	})
 
 	// Unique ID Generation
-	current_uid := 0
 	n.Handle("generate", func(msg maelstrom.Message) error {
-
 		var body map[string]any
 		if err := json.Unmarshal(msg.Body, &body); err != nil {
 			return err
 		}
 
+		// generate a random uid
+		requestBody := Uid{
+			Uid: rand.Int(),
+		}
+
+		requestBytes, err := json.Marshal(&requestBody)
+		if err != nil {
+			return err
+		}
+
+		reader := bytes.NewReader(requestBytes)
+
+		_, err = http.Post("http://uid-storage:8080/uid", "application/json", reader)
+		if err != nil {
+			return err
+		}
+
 		body["type"] = "generate_ok"
-		body["id"] = current_uid
-		current_uid++
+		body["id"] = requestBody.Uid
 
 		return n.Reply(msg, body)
 	})
