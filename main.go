@@ -33,9 +33,9 @@ func main() {
 	})
 
 	// Unique ID Generation
-	var mutex sync.Mutex
+	var uidMutex sync.Mutex
 	uidSequence := -1
-	lastTimestamp := time.Now().UnixMilli()
+	uidLastTimestamp := time.Now().UnixMilli()
 	n.Handle("generate", func(msg maelstrom.Message) error {
 		var body map[string]any
 		if err := json.Unmarshal(msg.Body, &body); err != nil {
@@ -45,8 +45,8 @@ func main() {
 		timestamp := time.Now().UnixMilli()
 
 		// Protect variables because of concurrent access
-		mutex.Lock()
-		if timestamp != lastTimestamp {
+		uidMutex.Lock()
+		if timestamp != uidLastTimestamp {
 			// Reset the sequence number each millisecond to
 			// refresh the pool of available UIDs and to keep
 			// sequence consistent for each millisecond
@@ -54,8 +54,8 @@ func main() {
 		}
 
 		uidSequence++
-		lastTimestamp = timestamp
-		mutex.Unlock()
+		uidLastTimestamp = timestamp
+		uidMutex.Unlock()
 
 		body["type"] = "generate_ok"
 		body["id"] = fmt.Sprintf("%d%s%d", timestamp, n.ID(), uidSequence)
