@@ -41,8 +41,9 @@ func main() {
 
 		requestBody := Uid{}
 		// retry new uid when storage detects a duplicate
+		retries := 3
 		retry := true
-		for retry {
+		for retry && retries > 0 {
 			requestBody.Uid = rand.IntN(50000)
 
 			requestBytes, err := json.Marshal(&requestBody)
@@ -58,6 +59,8 @@ func main() {
 			}
 
 			retry = resp.StatusCode == http.StatusConflict
+			retries--
+
 			resp.Body.Close()
 		}
 
