@@ -49,4 +49,68 @@ solution untenable. I implemented some basic retry logic (yes, I know infinite
 retries are dumb) and ran into the expected failures at the end of the test run.
 The server became some busy with retries that new tests failed. I'll add a limit
 to retries just to get the test to complete without errors and see how many UID
-generations fail.
+generations fail. Results are still awful
+
+I didn't get around to implementing this idea, but my next thought was: why does
+the generator need to store ALL the IDs indefinitely? this would solve the issue
+of pool exhaustion. At the beginning of each day, we can clear the "used UID"
+pool and forget about checking ALL the UIDs that have been generated since the
+start of the system. The issue there is we need a way to distinguish groups of
+IDs by day. To do that, a simple sequence number can be used that tracks what
+day the UID was generated:
+
+[ DAY : int ][ SEQUENCE NUMBER : int ]
+
+This still relies on a central system to track the current pool of UIDs, which
+isn't a distributed system. I knew time was an important aspect of the solution
+to the UID problem because I read about UUIDs a few years ago (Twitter
+snowflakes, specifically). But I couldn't remember the full solution.
+
+Here's my favorite part:
+
+I ended up posing this problem to my sister for fun. She came up with a
+brilliant idea in just a few minutes. Each node can generate it's own set of
+unique ideas using a sequence number and a node identifier. Her UIDs would
+be of the form:
+
+[ NODE ID : int ][ SEQUENCE NUMBER : int ]
+
+My critique was that the management of the node IDs would be a chore; there
+should never be a case where two nodes use the same ID. Managing that over
+time with nodes that can come and go would be very annoying; one slip up and
+you've got data corruption.
+
+She was SO CLOSE to coming up with Twitter's snowflake ID and she has no
+background in system design or software engineering. Truly amazing. We only
+discussed the problem for maybe 15 minutes, tops.
+
+I caved and looked up the ID format of Twitter's snowflakes the same night.
+
+It became immediately apparent why their solution is so brilliant:
+1. The milliseconds since epoch portion of their UID means that EVERY
+MILLISECOND, there is a fresh pool of unique IDs, similiar to my day
+refresh solution, but on a much shorter scale.
+1. The sequence ID is similar to the basic, single node solution. The
+sequence number is refreshed every millisecond.
+
+At this point, we have an infinite number of UIDs to work with. The issue
+remaining is: how do we do this in many different places without coordination?
+
+The machine ID ties the two solutions together beautifully. Putting a machine
+ID in the UID guarantees that each node will generate unique IDs as long as
+their clock is locally consistent and no other node shares the same ID. This
+does not mean however, that machine IDs must be universally unique. The
+component of time means that machine IDs can be reused as long as two machines
+with the same ID never exist at the same time. This eliminates the issue of
+ID exhaustion based on the size of the machine ID portion of the UID.
+
+The time portion of the UID ensures that there is always IDs available.
+The machine ID guarantees that each machine will generate unique IDs.
+And the sequence number defines the pool of available IDs each millisecond in
+a stupidly simple way.
+
+Absolutely brilliant. With a bit more refinement of our combined solutions, we
+would have arrived at the solution. It's important to think about the attributes
+of data that we can utilize and how they can form emergent properties when
+combined. It's worthwhile to think through simple solutions because they still
+have value, even when working on complex problems.
