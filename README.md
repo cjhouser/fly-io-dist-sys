@@ -114,3 +114,27 @@ would have arrived at the solution. It's important to think about the attributes
 of data that we can utilize and how they can form emergent properties when
 combined. It's worthwhile to think through simple solutions because they still
 have value, even when working on complex problems.
+
+# Challenge #3: Broadcast
+Broadcasts need to be more efficient. Initially, I would just fire and forget
+a new broadcast to all neighbors of each node. Issues with this approach:
+1. Loops will cause network flooding. Broadcasts will be propagated forever
+1. Inefficient to send a message to all neighbors. Only neighbors who haven't
+seen the message need to get it.
+
+Point #2 is a bit interesting. With a fire and forget approach, it's not
+possible to guarantee that a neighbor received a broadcast. However, each node
+can track who sent it a message. The node can skip sending a message to a 
+neighbor who already has it, because the neighbor was the one who sent it to
+the node!
+
+There is still a large issue, though. How does the system recover from a
+partition? If a message is only broadcast once, while the network is
+partitioned, how will the nodes in the partition without the sender get the
+data? They can't request the data, because they don't know about it.
+
+Is it possible for the nodes to detect a partition, then trigger recovery
+procedures? Or perhaps a periodic check-in with other nodes is sufficient?
+
+The former seems more resource efficient, but more complex. The latter is
+simpler, but more resource inefficient.

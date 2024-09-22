@@ -19,4 +19,8 @@ RUN curl --remote-header-name --location --output maelstrom.tar.bz2 \
     && rm maelstrom.tar.bz2
 WORKDIR /maelstrom
 COPY --from=build /build/node /maelstrom/node
+RUN mkdir -p /root/go/bin/
+RUN ln -s /maelstrom/node /root/go/bin/maelstrom-echo
+RUN ln -s /maelstrom/node /root/go/bin/maelstrom-unique-ids
+RUN ln -s /maelstrom/node /root/go/bin/maelstrom-broadcast 
 CMD [ "./maelstrom" ]

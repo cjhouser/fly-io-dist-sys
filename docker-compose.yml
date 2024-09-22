@@ -1,13 +1,5 @@
 services:
-  cli:
-    build:
-     context: .
-    volumes:
-    - type: volume
-      source: store
-      target: /maelstrom/store
-    command: tail -f /dev/null
-  server:
+  maelstrom:
     build:
       context: .
     volumes:
