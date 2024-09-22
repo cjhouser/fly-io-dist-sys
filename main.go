@@ -1,12 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand/v2"
-	"net/http"
+	"sync"
+	"time"
 
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
@@ -34,43 +33,32 @@ func main() {
 	})
 
 	// Unique ID Generation
+	var mutex sync.Mutex
+	uidSequence := -1
+	lastTimestamp := time.Now().UnixMilli()
 	n.Handle("generate", func(msg maelstrom.Message) error {
 		var body map[string]any
 		if err := json.Unmarshal(msg.Body, &body); err != nil {
 			return err
 		}
 
-		requestBody := Uid{}
-		// retry new uid when storage detects a duplicate
-		retries := 3
-		retry := true
-		for retry && retries > 0 {
-			requestBody.Uid = rand.IntN(50000)
+		timestamp := time.Now().UnixMilli()
 
-			requestBytes, err := json.Marshal(&requestBody)
-			if err != nil {
-				return err
-			}
-
-			reader := bytes.NewReader(requestBytes)
-
-			resp, err := http.Post("http://uid-storage:8080/uid", "application/json", reader)
-			if err != nil {
-				return err
-			}
-
-			retry = resp.StatusCode == http.StatusConflict
-			retries--
-
-			resp.Body.Close()
+		// Protect variables because of concurrent access
+		mutex.Lock()
+		if timestamp != lastTimestamp {
+			// Reset the sequence number each millisecond to
+			// refresh the pool of available UIDs and to keep
+			// sequence consistent for each millisecond
+			uidSequence = -1
 		}
 
-		if retry && retries < 1 {
-			return fmt.Errorf("could not generate ID")
-		}
+		uidSequence++
+		lastTimestamp = timestamp
+		mutex.Unlock()
 
 		body["type"] = "generate_ok"
-		body["id"] = requestBody.Uid
+		body["id"] = fmt.Sprintf("%d%s%d", timestamp, n.ID(), uidSequence)
 
 		return n.Reply(msg, body)
 	})
