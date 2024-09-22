@@ -39,21 +39,26 @@ func main() {
 			return err
 		}
 
-		// generate a random uid
-		requestBody := Uid{
-			Uid: rand.Int(),
-		}
+		requestBody := Uid{}
+		// retry new uid when storage detects a duplicate
+		retry := true
+		for retry {
+			requestBody.Uid = rand.IntN(50000)
 
-		requestBytes, err := json.Marshal(&requestBody)
-		if err != nil {
-			return err
-		}
+			requestBytes, err := json.Marshal(&requestBody)
+			if err != nil {
+				return err
+			}
 
-		reader := bytes.NewReader(requestBytes)
+			reader := bytes.NewReader(requestBytes)
 
-		_, err = http.Post("http://uid-storage:8080/uid", "application/json", reader)
-		if err != nil {
-			return err
+			resp, err := http.Post("http://uid-storage:8080/uid", "application/json", reader)
+			if err != nil {
+				return err
+			}
+
+			retry = resp.StatusCode == http.StatusConflict
+			resp.Body.Close()
 		}
 
 		body["type"] = "generate_ok"

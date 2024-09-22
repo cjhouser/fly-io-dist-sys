@@ -28,3 +28,25 @@ Compariston to previous attempt:
 1. Horizontally scalable, but may suffer from diminishing returns as competition
 for central storage increases
 1. The UID node is no longer a single point of failure
+
+### Results
+```
+./maelstrom test -w unique-ids --bin /maelstrom/node --time-limit 5 --rate 10 --node-count 1 --availability total --nemesis partition
+```
+Ran a simple case to see if this is working as expected. No collisions were
+detected, but that's expected with such a short test and a UID pool so large.
+I expect this will work fine scaled up to three nodes. I'm a bit curious to see
+what pool size will be sufficient to avoid failures. Of course, it all depends
+on the test length. UID exhaustion with this strategy is an obvious flaw.
+
+```
+./maelstrom test -w unique-ids --bin /maelstrom/node --time-limit 30 --rate 1000 --node-count 3 --availability total --nemesis partition
+```
+Works decently well. Latency under 10ms for the most part. I didn't see any
+collisions. I reduced the pool of available UIDs a few times to simulate the
+gradual exhaustion of available IDs. This is a pretty big issue that makes this
+solution untenable. I implemented some basic retry logic (yes, I know infinite
+retries are dumb) and ran into the expected failures at the end of the test run.
+The server became some busy with retries that new tests failed. I'll add a limit
+to retries just to get the test to complete without errors and see how many UID
+generations fail.

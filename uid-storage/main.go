@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 )
 
 type Uid struct {
@@ -12,8 +13,12 @@ type Uid struct {
 }
 
 func uidClosure() func(http.ResponseWriter, *http.Request) {
-	uids := map[int]struct{}{} // Empty structs don't use memory
-	fmt.Printf("closure")
+	sharedUidStorage := struct {
+		mutex sync.Mutex
+		uids  map[int]struct{} // Empty structs don't use memory
+	}{
+		uids: map[int]struct{}{},
+	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -29,15 +34,20 @@ func uidClosure() func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		// collision check
-		if _, ok := uids[uid.Uid]; ok {
-			fmt.Printf("failed collision check: %v", err)
+		sharedUidStorage.mutex.Lock()
+		_, collision := sharedUidStorage.uids[uid.Uid]
+		sharedUidStorage.mutex.Unlock()
+
+		if collision {
+			fmt.Printf("failed collision check")
 			http.Error(w, "conflict", http.StatusConflict)
 			return
 		}
 
-		uids[uid.Uid] = struct{}{}
-		fmt.Printf("saved uid %d\n", uid.Uid)
+		sharedUidStorage.mutex.Lock()
+		sharedUidStorage.uids[uid.Uid] = struct{}{}
+		sharedUidStorage.mutex.Unlock()
+
 	}
 }
 
