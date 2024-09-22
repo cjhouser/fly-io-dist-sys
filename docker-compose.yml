@@ -1,0 +1,21 @@
+services:
+  cli:
+    build:
+     context: .
+    volumes:
+    - type: volume
+      source: store
+      target: /maelstrom/store
+    command: tail -f /dev/null
+  server:
+    build:
+      context: .
+    volumes:
+    - type: volume
+      source: store
+      target: /maelstrom/store
+    command: ./maelstrom serve
+    ports:
+    - 8080:8080
+volumes:
+  store:
