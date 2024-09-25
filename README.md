@@ -138,3 +138,31 @@ procedures? Or perhaps a periodic check-in with other nodes is sufficient?
 
 The former seems more resource efficient, but more complex. The latter is
 simpler, but more resource inefficient.
+
+## Challenge #3c: Fault Tolerant Broadcast
+I did a little whiteboarding and realized I can use a handshake of sorts to
+confirm that a message has been propagated to all neighbors! 
+
+Here's the basics of the program
+1. If the node hasn't seen the message before
+    1. Initialize a map of message to neighbor on receipt of a new message
+    1. Send all outstanding messages to truant neighbors
+1. If the sender is not in the map for message
+    1. Send the message back to the sender
+1. Delete the sender from the map
+
+<img src="./broadcast.svg">
+
+The diagram shows the full exchange between two neighbors in the absence of a
+partition. Now, consider partitions at each step where a message is in flight:
+Step 2: The state of the graph will revert to Step 1. We can ignore this case
+Step 4: n1 will send a message to n2 later. n2 will send the message back to n1
+as confirmation. Eventually, the n1 will get the acknowledgement and stop
+sending message A
+
+The way I currently implemented this is very inefficient, especially with a
+large amount of messages; outstanding messages will be sent out on every new
+message. I need a mechanism which will send outstanding messages under specific
+conditions that won't flood the network. In addition, the eventual consistency
+guarantee only works if there is a constant flow of messages. Outstanding
+messages will never make it if the flow of new messages stops!

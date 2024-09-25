@@ -83,10 +83,20 @@ func main() {
 		Type string `json:"type"`
 	}
 
-	var broadcastMutex sync.Mutex
-	var broadcastNeighbors []string
-	// Use "sets" for quick lookups
-	broadcastSeen := map[int]map[string]struct{}{} // structs use no memory
+	type broadcast struct {
+		mutex               sync.Mutex
+		neighbors           map[string]struct{}
+		outstandingMessages map[int]map[string]struct{}
+	}
+
+	bc := broadcast{
+		neighbors:           map[string]struct{}{},
+		outstandingMessages: map[int]map[string]struct{}{},
+	}
+
+	n.Handle("broadcast_ok", func(msg maelstrom.Message) error {
+		return nil
+	})
 
 	n.Handle("broadcast", func(msg maelstrom.Message) error {
 		var body broadcastRequestBody
@@ -94,24 +104,33 @@ func main() {
 			return err
 		}
 
-		broadcastMutex.Lock()
+		bc.mutex.Lock()
 
-		// I haven't seen this message before
-		if _, seenMessage := broadcastSeen[body.Message]; !seenMessage {
-			broadcastSeen[body.Message] = map[string]struct{}{}
-		}
+		// I've never seen this message before, I should broadcast it
+		if _, ok := bc.outstandingMessages[body.Message]; !ok {
+			bc.outstandingMessages[body.Message] = map[string]struct{}{}
+			for neighbor := range bc.neighbors {
+				bc.outstandingMessages[body.Message][neighbor] = struct{}{}
+			}
 
-		// Track the sender so I don't send the message back to him
-		broadcastSeen[body.Message][msg.Src] = struct{}{}
-
-		// Send message X to neighbors who didn't send me message X
-		for _, neighbor := range broadcastNeighbors {
-			if _, neighborHasSeen := broadcastSeen[body.Message][neighbor]; !neighborHasSeen {
-				n.Send(neighbor, body)
+			// I've got messages that haven't been acknowledged. Sending them
+			// now.
+			for message, neighbors := range bc.outstandingMessages {
+				bc := broadcastRequestBody{Type: "broadcast", Message: message}
+				for neighbor := range neighbors {
+					n.Send(neighbor, &bc)
+				}
 			}
 		}
+		// Looks like sender never got my acknowledgement, send it again
+		if _, ok := bc.outstandingMessages[body.Message][msg.Src]; !ok {
+			n.Send(msg.Src, broadcastRequestBody{Type: "broadcast", Message: body.Message})
+		}
 
-		broadcastMutex.Unlock()
+		// Handshake with sender is done
+		delete(bc.outstandingMessages[body.Message], msg.Src)
+
+		bc.mutex.Unlock()
 
 		responseBody := broadcastResponse{
 			Type: "broadcast_ok",
@@ -126,14 +145,14 @@ func main() {
 			return err
 		}
 
-		broadcastMutex.Lock()
-		seenMessages := make([]int, len(broadcastSeen))
+		bc.mutex.Lock()
+		seenMessages := make([]int, len(bc.outstandingMessages))
 		i := 0
-		for message := range broadcastSeen {
+		for message := range bc.outstandingMessages {
 			seenMessages[i] = message
 			i++
 		}
-		broadcastMutex.Unlock()
+		bc.mutex.Unlock()
 
 		responseBody := broadcastReadResponse{
 			Type:     "read_ok",
@@ -149,9 +168,11 @@ func main() {
 			return err
 		}
 
-		broadcastMutex.Lock()
-		broadcastNeighbors = body.Topology[n.ID()]
-		broadcastMutex.Unlock()
+		bc.mutex.Lock()
+		for _, neighbor := range body.Topology[n.ID()] {
+			bc.neighbors[neighbor] = struct{}{}
+		}
+		bc.mutex.Unlock()
 
 		responseBody := broadcastTopologyResponse{
 			Type: "topology_ok",
