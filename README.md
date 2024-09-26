@@ -196,3 +196,25 @@ The queue helped quite a bit. The implementation I used is crude and could
 definitely be improved, but I'm going to ignore that for now. It may become
 an issue when I get to the latency objectives. I reduced messages per 
 operation down to 2800. Pretty substantial, but not nearly enough. Hmmm...
+
+---
+
+I think I've been trying to solve this problem with the false assumption that
+I can only use the payloads which are described in the problem statement...
+
+If I can construct my own payloads and even endpoints, this may become MUCH
+easier.
+
+Emergent properties (thanks Challenge #2!) may be important for efficient
+propagation of messages. A node has some basic knowledge:
+1. messages it has received
+1. messages it has sent
+1. which neighbor sent it a message
+1. who its neighbors are
+
+But there is also metadata available here:
+1. when a message was received/sent
+1. latency of an acknowledgement
+
+With my own payloads/endpoints, I may be able to get even more valuable
+metadata to make a better broadcast system!
