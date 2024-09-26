@@ -221,3 +221,24 @@ metadata to make a better broadcast system!
 
 Come to think of it, I had a great idea early on that I dropped because I
 thought i was "against the rules": piggybacking broadcasts and acknowledgements!
+
+---
+
+Here's the plan: a node will send the entire list of outstanding messages for a
+neighbor whenever a new message comes in (i.e. when we have to broadcast anyway)
+
+Messages will be eventually acknowledged as long as there is a constant flow of
+new messages.
+
+If a receipient has already seen the message before and has already sent an
+acknowledgement, it will queue up a response to the sender which will be sent
+on the next broadcast.
+
+So what we need is a payload like this:
+``` go
+{
+    type: "broadcast",
+    message: 0,
+    acks: []int{1, 2, 3},
+}
+```
