@@ -218,3 +218,6 @@ But there is also metadata available here:
 
 With my own payloads/endpoints, I may be able to get even more valuable
 metadata to make a better broadcast system!
+
+Come to think of it, I had a great idea early on that I dropped because I
+thought i was "against the rules": piggybacking broadcasts and acknowledgements!
