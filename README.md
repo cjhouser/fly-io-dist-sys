@@ -189,3 +189,10 @@ before changing anything else.
 Sending less than the entire set of outstanding messages is a good approach.
 I'll use a queue of structs to send one outstanding message at a time, then
 delete structs from the queue as acks come in.
+
+---
+
+The queue helped quite a bit. The implementation I used is crude and could
+definitely be improved, but I'm going to ignore that for now. It may become
+an issue when I get to the latency objectives. I reduced messages per 
+operation down to 2800. Pretty substantial, but not nearly enough. Hmmm...

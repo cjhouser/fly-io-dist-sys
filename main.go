@@ -84,14 +84,16 @@ func main() {
 	}
 
 	type broadcast struct {
-		mutex               sync.Mutex
-		neighbors           map[string]struct{}
-		outstandingMessages map[int]map[string]struct{}
+		mutex          sync.Mutex
+		neighbors      []string
+		seen           map[int]struct{}
+		unacknowledged *queue
 	}
 
 	bc := broadcast{
-		neighbors:           map[string]struct{}{},
-		outstandingMessages: map[int]map[string]struct{}{},
+		neighbors:      []string{},
+		seen:           map[int]struct{}{},
+		unacknowledged: NewQueue(),
 	}
 
 	n.Handle("broadcast_ok", func(msg maelstrom.Message) error {
@@ -106,31 +108,35 @@ func main() {
 
 		bc.mutex.Lock()
 
-		// I've never seen this message before, I should broadcast it
-		if _, ok := bc.outstandingMessages[body.Message]; !ok {
-			bc.outstandingMessages[body.Message] = map[string]struct{}{}
-			for neighbor := range bc.neighbors {
-				bc.outstandingMessages[body.Message][neighbor] = struct{}{}
+		// I've never seen this message before
+		if _, ok := bc.seen[body.Message]; !ok {
+			bc.seen[body.Message] = struct{}{}
+
+			for _, neighbor := range bc.neighbors {
+				// I'll note the neighbors who need to ack this message
+				bc.unacknowledged.Enqueue(
+					&Unacknowledged{message: body.Message, neighbor: neighbor},
+				)
+				// Then I'll send the message
+				n.Send(neighbor, body)
 			}
 
-			// I've got messages that haven't been acknowledged. Sending them
-			// now.
-			for message, neighbors := range bc.outstandingMessages {
-				bc := broadcastRequestBody{Type: "broadcast", Message: message}
-				for neighbor := range neighbors {
-					n.Send(neighbor, &bc)
-				}
+			// I've got unacknowledged messages. Sending one again!
+			unackd, err := bc.unacknowledged.Dequeue(nil)
+			if err == nil {
+				bc.unacknowledged.Enqueue(unackd)
+				n.Send(unackd.neighbor, broadcastRequestBody{Type: "broadcast", Message: unackd.message})
 			}
 		}
-		// Looks like sender never got my acknowledgement, send it again
-		if _, ok := bc.outstandingMessages[body.Message][msg.Src]; !ok {
-			n.Send(msg.Src, broadcastRequestBody{Type: "broadcast", Message: body.Message})
-		}
-
-		// Handshake with sender is done
-		delete(bc.outstandingMessages[body.Message], msg.Src)
 
 		bc.mutex.Unlock()
+
+		// Looks like sender never got my acknowledgement, I'll send another ack to them
+		if _, err := bc.unacknowledged.Dequeue(
+			&Unacknowledged{neighbor: msg.Src, message: body.Message},
+		); err != nil {
+			n.Send(msg.Src, broadcastRequestBody{Type: "broadcast", Message: body.Message})
+		}
 
 		responseBody := broadcastResponse{
 			Type: "broadcast_ok",
@@ -146,13 +152,14 @@ func main() {
 		}
 
 		bc.mutex.Lock()
-		seenMessages := make([]int, len(bc.outstandingMessages))
+		defer bc.mutex.Unlock()
+
+		seenMessages := make([]int, len(bc.seen))
 		i := 0
-		for message := range bc.outstandingMessages {
+		for message := range bc.seen {
 			seenMessages[i] = message
 			i++
 		}
-		bc.mutex.Unlock()
 
 		responseBody := broadcastReadResponse{
 			Type:     "read_ok",
@@ -169,10 +176,9 @@ func main() {
 		}
 
 		bc.mutex.Lock()
-		for _, neighbor := range body.Topology[n.ID()] {
-			bc.neighbors[neighbor] = struct{}{}
-		}
-		bc.mutex.Unlock()
+		defer bc.mutex.Unlock()
+
+		bc.neighbors = append(bc.neighbors, body.Topology[n.ID()]...)
 
 		responseBody := broadcastTopologyResponse{
 			Type: "topology_ok",
