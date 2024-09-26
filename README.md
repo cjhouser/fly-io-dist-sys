@@ -166,3 +166,26 @@ message. I need a mechanism which will send outstanding messages under specific
 conditions that won't flood the network. In addition, the eventual consistency
 guarantee only works if there is a constant flow of messages. Outstanding
 messages will never make it if the flow of new messages stops!
+
+## Challenge #4c: Efficient Broadcast: Part 1
+Hmm. I think the maintainers of this website messed up. The next challange is
+to make the broadcast system faster, but gives higher metrics for success...
+
+I'll shuffle things around a bit to make more sense. In this part, I will
+shoot for:
+
+Messages-per-operation is below 30
+Median latency is below 1 second
+Maximum latency is below 2 seconds
+
+---
+
+Hoooooo boy. I need to get my messages per operation below 30... and they are currently at 7260... alrighty then.
+
+I know FOR SURE that a big chunk of this is the silly logic I'm using to send
+unacknowledged messages. I've gotta figure out a better strategy for that
+before changing anything else.
+
+Sending less than the entire set of outstanding messages is a good approach.
+I'll use a queue of structs to send one outstanding message at a time, then
+delete structs from the queue as acks come in.
