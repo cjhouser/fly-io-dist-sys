@@ -293,3 +293,52 @@ of a message, dropped "inquiries" will never cause the system to enter into
 a bad state. The dropped inquires will be resent next time a new message is
 broadcast! This also includes every new message, new message are handled by this
 as well.
+
+Results:
+
+```
+:stable-latencies {
+    0 0,
+    0.5 449, <---- Missed the median by less than 50ms. Dang
+    0.95 685,
+    0.99 763,
+    1 800 <--- Hmmm. 200ms off. Damn.
+},
+:net {
+    :all {
+        :send-count 60214,
+        :recv-count 60214,
+        :msg-count 60214,
+        :msgs-per-op 29.676687
+    },
+    :clients {
+        :send-count 4158,
+        :recv-count 4158,
+        :msg-count 4158
+    },
+    :servers {
+        :send-count 56056,
+        :recv-count 56056,
+        :msg-count 56056,
+        :msgs-per-op 27.627403 <--- WOW!!!!!!!!
+    },
+}
+
+```
+
+I missed the latency targets, but I then again I wasn't shooting to beat those
+metrics on this pass. Pretty damn fine job if I do say so myself.
+
+27 msgs-per-op down from the THOUSANDS before. Holy smokes!!!
+
+Now I gotta figure out how to squeeze a bit more efficiency out of of my nodes.
+
+As an adendum: I think I understand why this challenge has a lower threshold
+than the next:
+
+If we're aiming to decrease the messages per op by 1/3 in the next challenge,
+latency will have to suffer because the latency is defined as:
+
+"These latencies are measured from the time a broadcast request was acknowledged to when it was last missing from a read on any node."
+
+Hmmm....
