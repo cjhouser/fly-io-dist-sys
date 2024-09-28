@@ -242,3 +242,54 @@ So what we need is a payload like this:
     acks: []int{1, 2, 3},
 }
 ```
+
+---
+
+Internalizing the concept of "eventually consistent" made this problem much
+easier to reason about, especially considering the # of message requirement.
+
+In reality, a message only needs to be sent when there is a new message to
+broadcast. Assuming there is a constant flow of new messages means that
+acknowledgements and "inquiries" (when a node expected an acknowledgement,
+but hasn't received it yet) can be delayed until a new message is
+broadcast.
+
+While nodes maintain their own internal state, but don't actually need to
+communicate that to other nodes in the system. Specifically, each node will
+track
+
+1. the messages it has seen
+1. the messages from each neighbor which needs to be acknowledged
+1. the acknowledgements that it needs to send to each
+
+neighbor. Only a list of messages is sent over the wire; it's up to the
+receipient node to decide what to do with each message.
+
+Each node can categorize messages into:
+
+1. A message that is known and is expected
+1. A message that is known and is unexpected
+1. A message that is unknown
+
+The second case is of particular interest; that is the case that determines
+that the broadcast system is in a bad state. That bad state can be described
+as, from the perspective of the receipient node "My neighbor is expecting
+acknowledgement that I already sent." Lost acknowledgements put the system
+into this state.
+
+This diagram shows the state of neighboring nodes just after a message from
+n1 to n0 was lost. The message contained the messages A, B, and C. As you can
+see, node n1 is expecting acknowledgement of a message that n1 already
+acknowledged; the n1 "ack" and n0 "expect" lists don't intersect.
+
+<img src="./broadcast-bad-state.svg">
+
+To recover, a node simply needs to add the unexpected message to the outgoing
+acknowledgements and then wait for the next new message for the acknowledgement
+to be sent! That's what n1 does when it sees A and B messages again.
+
+Because the list of expected acknowledgments is only ever modified on receipt
+of a message, dropped "inquiries" will never cause the system to enter into
+a bad state. The dropped inquires will be resent next time a new message is
+broadcast! This also includes every new message, new message are handled by this
+as well.
