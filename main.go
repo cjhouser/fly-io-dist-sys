@@ -63,15 +63,10 @@ func main() {
 		return n.Reply(msg, body)
 	})
 
-	type broadcastRequestBody struct {
-		Type     string              `json:"type"`
-		Message  int                 `json:"message,omitempty"`
-		Messages []int               `json:"messages,omitempty"`
-		Topology map[string][]string `json:"topology,omitempty"`
-	}
-
-	type broadcastResponse struct {
-		Type string `json:"type"`
+	type broadcastRequest struct {
+		Type     string `json:"type"`
+		Message  int    `json:"message"`
+		Messages []int  `json:"messages"`
 	}
 
 	type broadcastReadResponse struct {
@@ -79,112 +74,124 @@ func main() {
 		Messages []int  `json:"messages"`
 	}
 
-	type broadcastTopologyResponse struct {
+	type broadcastType struct {
 		Type string `json:"type"`
 	}
 
+	type broadcastTopology struct {
+		Type     string              `json:"type"`
+		Topology map[string][]string `json:"topology"`
+	}
+
 	type broadcast struct {
-		mutex          sync.Mutex
-		neighbors      []string
-		seen           map[int]struct{}
-		unacknowledged *queue
+		neighborAcks    map[string]map[int]struct{}
+		neighborExpects map[string]map[int]struct{}
+		mutex           sync.Mutex
+		seens           map[int]struct{}
 	}
 
 	bc := broadcast{
-		neighbors:      []string{},
-		seen:           map[int]struct{}{},
-		unacknowledged: NewQueue(),
+		neighborExpects: map[string]map[int]struct{}{},
+		neighborAcks:    map[string]map[int]struct{}{},
+		seens:           map[int]struct{}{},
 	}
 
-	n.Handle("broadcast_ok", func(msg maelstrom.Message) error {
+	n.Handle("broadcast", func(msg maelstrom.Message) error {
+		bc.mutex.Lock()
+		defer bc.mutex.Unlock()
+
+		var body broadcastRequest
+		if err := json.Unmarshal(msg.Body, &body); err != nil {
+			return err
+		}
+
+		// Hacky way to handle messages from Maelstrom vs messages
+		// from other workers
+		if len(body.Messages) == 0 {
+			body.Messages = append(body.Messages, body.Message)
+			defer n.Reply(msg, broadcastType{Type: "broadcast_ok"})
+		}
+
+		for _, message := range body.Messages {
+			if _, seen := bc.seens[message]; seen {
+				if _, expected := bc.neighborExpects[msg.Src][message]; expected {
+					delete(bc.neighborExpects[msg.Src], message)
+				} else {
+					// Recover from state where neighbor expects something that
+					// I've already acknowledged
+					bc.neighborAcks[msg.Src][message] = struct{}{}
+				}
+			} else {
+				bc.seens[message] = struct{}{}
+				// Another hack to keep Maelstrom nodes out of the data
+				if _, isNode := bc.neighborAcks[msg.Src]; isNode {
+					bc.neighborAcks[msg.Src][message] = struct{}{}
+				}
+				for neighbor := range bc.neighborExpects {
+					if neighbor != msg.Src {
+						bc.neighborExpects[neighbor][message] = struct{}{}
+						for expect := range bc.neighborExpects[neighbor] {
+							// little trick to dedupe. acks[neighbor] will be
+							// wiped before the loop ends anyway
+							bc.neighborAcks[neighbor][expect] = struct{}{}
+						}
+						outgoingMessages := make([]int, len(bc.neighborAcks[neighbor]))
+						i := 0
+						for outgoingMessage := range bc.neighborAcks[neighbor] {
+							outgoingMessages[i] = outgoingMessage
+							i++
+						}
+						n.Send(neighbor, broadcastRequest{
+							Type:     "broadcast",
+							Messages: outgoingMessages,
+						})
+						bc.neighborAcks[neighbor] = map[int]struct{}{}
+					}
+				}
+			}
+		}
 		return nil
 	})
 
-	n.Handle("broadcast", func(msg maelstrom.Message) error {
-		var body broadcastRequestBody
-		if err := json.Unmarshal(msg.Body, &body); err != nil {
-			return err
-		}
-
-		bc.mutex.Lock()
-
-		// I've never seen this message before
-		if _, ok := bc.seen[body.Message]; !ok {
-			bc.seen[body.Message] = struct{}{}
-
-			for _, neighbor := range bc.neighbors {
-				// I'll note the neighbors who need to ack this message
-				bc.unacknowledged.Enqueue(
-					&Unacknowledged{message: body.Message, neighbor: neighbor},
-				)
-				// Then I'll send the message
-				n.Send(neighbor, body)
-			}
-
-			// I've got unacknowledged messages. Sending one again!
-			unackd, err := bc.unacknowledged.Dequeue(nil)
-			if err == nil {
-				bc.unacknowledged.Enqueue(unackd)
-				n.Send(unackd.neighbor, broadcastRequestBody{Type: "broadcast", Message: unackd.message})
-			}
-		}
-
-		bc.mutex.Unlock()
-
-		// Looks like sender never got my acknowledgement, I'll send another ack to them
-		if _, err := bc.unacknowledged.Dequeue(
-			&Unacknowledged{neighbor: msg.Src, message: body.Message},
-		); err != nil {
-			n.Send(msg.Src, broadcastRequestBody{Type: "broadcast", Message: body.Message})
-		}
-
-		responseBody := broadcastResponse{
-			Type: "broadcast_ok",
-		}
-
-		return n.Reply(msg, responseBody)
-	})
-
 	n.Handle("read", func(msg maelstrom.Message) error {
-		var body broadcastRequestBody
-		if err := json.Unmarshal(msg.Body, &body); err != nil {
-			return err
-		}
-
 		bc.mutex.Lock()
 		defer bc.mutex.Unlock()
 
-		seenMessages := make([]int, len(bc.seen))
+		var body broadcastType
+		if err := json.Unmarshal(msg.Body, &body); err != nil {
+			return err
+		}
+
+		seens := make([]int, len(bc.seens))
 		i := 0
-		for message := range bc.seen {
-			seenMessages[i] = message
+		for seen := range bc.seens {
+			seens[i] = seen
 			i++
 		}
 
-		responseBody := broadcastReadResponse{
+		return n.Reply(msg, broadcastReadResponse{
 			Type:     "read_ok",
-			Messages: seenMessages,
-		}
-
-		return n.Reply(msg, responseBody)
+			Messages: seens,
+		})
 	})
 
 	n.Handle("topology", func(msg maelstrom.Message) error {
-		var body broadcastRequestBody
+		bc.mutex.Lock()
+		defer bc.mutex.Unlock()
+
+		var body broadcastTopology
 		if err := json.Unmarshal(msg.Body, &body); err != nil {
 			return err
 		}
 
-		bc.mutex.Lock()
-		defer bc.mutex.Unlock()
-
-		bc.neighbors = append(bc.neighbors, body.Topology[n.ID()]...)
-
-		responseBody := broadcastTopologyResponse{
-			Type: "topology_ok",
+		for _, neighbor := range body.Topology[n.ID()] {
+			bc.neighborAcks[neighbor] = map[int]struct{}{}
+			bc.neighborExpects[neighbor] = map[int]struct{}{}
 		}
 
-		return n.Reply(msg, responseBody)
+		return n.Reply(msg, broadcastType{
+			Type: "topology_ok",
+		})
 	})
 
 	if err := n.Run(); err != nil {
