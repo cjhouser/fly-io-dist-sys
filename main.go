@@ -184,7 +184,102 @@ func main() {
 			return err
 		}
 
-		for _, neighbor := range body.Topology[n.ID()] {
+		topo := map[string][]string{}
+
+		/*
+			// Default topology
+			topo = body.Topology[n.ID()]
+
+		*/
+
+		/*
+			// Fully connected graph
+
+			for i := 0; i < nodeCount; i++ {
+				for j := 0; j < nodeCount; j++ {
+					if i != j {
+						topo[fmt.Sprintf("n%d", i)] = append(topo[fmt.Sprintf("n%d", i)], fmt.Sprintf("n%d", j))
+					}
+				}
+			}
+		*/
+
+		/*
+			// Highway
+			nodeCount := 25
+			for i := 1; i < nodeCount; i++ {
+				topo[fmt.Sprintf("n%d", i-1)] = append(topo[fmt.Sprintf("n%d", i-1)], fmt.Sprintf("n%d", i))
+				topo[fmt.Sprintf("n%d", i)] = append(topo[fmt.Sprintf("n%d", i)], fmt.Sprintf("n%d", i-1))
+			}
+		*/
+
+		// Ring
+		/*
+			nodeCount := 25
+			for i := 1; i < nodeCount; i++ {
+				topo[fmt.Sprintf("n%d", i-1)] = append(topo[fmt.Sprintf("n%d", i-1)], fmt.Sprintf("n%d", i))
+				topo[fmt.Sprintf("n%d", i)] = append(topo[fmt.Sprintf("n%d", i)], fmt.Sprintf("n%d", i-1))
+			}
+			topo["n0"] = append(topo["n0"], fmt.Sprintf("n%d", nodeCount-1))
+			topo[fmt.Sprintf("n%d", nodeCount-1)] = append(topo[fmt.Sprintf("n%d", nodeCount-1)], "n0")
+
+			// ring improvement: single connector
+			topo["n0"] = append(topo["n0"], fmt.Sprintf("n%d", int(nodeCount/2)))
+			topo[fmt.Sprintf("n%d", int(nodeCount/2))] = append(topo[fmt.Sprintf("n%d", int(nodeCount/2))], "n0")
+
+			// ring improvement: double connector
+			topo[fmt.Sprintf("n%d", int(nodeCount/4))] = append(topo[fmt.Sprintf("n%d", int(nodeCount/4))], fmt.Sprintf("n%d", int(nodeCount/4)+int(nodeCount/2)))
+			topo[fmt.Sprintf("n%d", int(nodeCount/4)+int(nodeCount/2))] = append(topo[fmt.Sprintf("n%d", int(nodeCount/4)+int(nodeCount/2))], fmt.Sprintf("n%d", int(nodeCount/4)))
+		*/
+
+		// Hub-connected ring
+		nodeCount := 25
+		for i := 1; i < nodeCount; i++ {
+			topo[fmt.Sprintf("n%d", i-1)] = append(topo[fmt.Sprintf("n%d", i-1)], fmt.Sprintf("n%d", i))
+			topo[fmt.Sprintf("n%d", i)] = append(topo[fmt.Sprintf("n%d", i)], fmt.Sprintf("n%d", i-1))
+		}
+
+		topo["n0"] = append(topo["n0"], fmt.Sprintf("n%d", nodeCount-1))
+
+		for i := 0; i < nodeCount; i = i + int((nodeCount)/6) - 1 {
+			topo[fmt.Sprintf("n%d", nodeCount-1)] = append(topo[fmt.Sprintf("n%d", nodeCount-1)], fmt.Sprintf("n%d", i))
+			topo[fmt.Sprintf("n%d", i)] = append(topo[fmt.Sprintf("n%d", i)], fmt.Sprintf("n%d", nodeCount-1))
+		}
+
+		/*
+			// Recursive 5-node Cluster
+			nodeCount := 25
+			// Subclusters
+			for i := 0; i < nodeCount; i = i + 5 {
+				topo[fmt.Sprintf("n%d", i)] = []string{fmt.Sprintf("n%d", i+1), fmt.Sprintf("n%d", i+2), fmt.Sprintf("n%d", i+3), fmt.Sprintf("n%d", i+4)}
+				topo[fmt.Sprintf("n%d", i+1)] = []string{fmt.Sprintf("n%d", i), fmt.Sprintf("n%d", i+2), fmt.Sprintf("n%d", i+4)}
+				topo[fmt.Sprintf("n%d", i+2)] = []string{fmt.Sprintf("n%d", i), fmt.Sprintf("n%d", i+1), fmt.Sprintf("n%d", i+3)}
+				topo[fmt.Sprintf("n%d", i+3)] = []string{fmt.Sprintf("n%d", i), fmt.Sprintf("n%d", i+2), fmt.Sprintf("n%d", i+4)}
+				topo[fmt.Sprintf("n%d", i+4)] = []string{fmt.Sprintf("n%d", i), fmt.Sprintf("n%d", i+1), fmt.Sprintf("n%d", i+3)}
+			}
+
+			// Hub Cluster to Leaf Clusters
+			topo["n1"] = append(topo["n1"], "n6")
+			topo["n6"] = append(topo["n6"], "n1")
+			topo["n2"] = append(topo["n2"], "n11")
+			topo["n11"] = append(topo["n11"], "n2")
+			topo["n3"] = append(topo["n3"], "n16")
+			topo["n16"] = append(topo["n16"], "n3")
+			topo["n4"] = append(topo["n4"], "n21")
+			topo["n21"] = append(topo["n21"], "n4")
+
+			// Leaf Cluster to Eachother
+			topo["n7"] = append(topo["n7"], "n12")
+			topo["n8"] = append(topo["n8"], "n22")
+			topo["n12"] = append(topo["n12"], "n7")
+			topo["n13"] = append(topo["n13"], "n17")
+			topo["n17"] = append(topo["n17"], "n13")
+			topo["n18"] = append(topo["n18"], "n23")
+			topo["n22"] = append(topo["n22"], "n8")
+			topo["n23"] = append(topo["n23"], "n18")
+		*/
+
+		for _, neighbor := range topo[n.ID()] {
 			bc.neighborAcks[neighbor] = map[int]struct{}{}
 			bc.neighborExpects[neighbor] = map[int]struct{}{}
 		}

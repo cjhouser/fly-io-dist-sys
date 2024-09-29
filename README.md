@@ -168,7 +168,7 @@ guarantee only works if there is a constant flow of messages. Outstanding
 messages will never make it if the flow of new messages stops!
 
 ## Challenge #4c: Efficient Broadcast: Part 1
-Hmm. I think the maintainers of this website messed up. The next challange is
+Hmm. I think the maintainers of this website messed up. The next challenge is
 to make the broadcast system faster, but gives higher metrics for success...
 
 I'll shuffle things around a bit to make more sense. In this part, I will
@@ -297,6 +297,9 @@ as well.
 Results:
 
 ```
+# Default topology
+# Without --nemesis=partition
+
 :stable-latencies {
     0 0,
     0.5 449, <---- Missed the median by less than 50ms. Dang
@@ -305,21 +308,7 @@ Results:
     1 800 <--- Hmmm. 200ms off. Damn.
 },
 :net {
-    :all {
-        :send-count 60214,
-        :recv-count 60214,
-        :msg-count 60214,
-        :msgs-per-op 29.676687
-    },
-    :clients {
-        :send-count 4158,
-        :recv-count 4158,
-        :msg-count 4158
-    },
     :servers {
-        :send-count 56056,
-        :recv-count 56056,
-        :msg-count 56056,
         :msgs-per-op 27.627403 <--- WOW!!!!!!!!
     },
 }
@@ -339,6 +328,221 @@ than the next:
 If we're aiming to decrease the messages per op by 1/3 in the next challenge,
 latency will have to suffer because the latency is defined as:
 
-"These latencies are measured from the time a broadcast request was acknowledged to when it was last missing from a read on any node."
+"These latencies are measured from the time a broadcast request was acknowledged
+to when it was last missing from a read on any node."
 
 Hmmm....
+
+---
+
+I mulled over the algorithm for a while to see if I could squeeze any
+performance out of it, but 200ms is a ton of latency to trim. After a while, I
+realized that the algorithm isn't the only important part of this problem.
+Infrastructure is just as imporant as the algorithm that executes on each node.
+
+I turned my attention to the topology used in the test; at this point, I have
+been testing against the predefined topology that is offered by Maelstrom.
+
+I figured that the topology that would offer the best latency would be a fully
+connected graph. Every node is connected to one another so that broadcasts
+reach all nodes in just one hop.
+
+```
+# Default topology
+# Without --nemesis=partition
+
+:stable-latencies {
+    0 0,
+    0.5 81,
+    0.95 95,
+    0.99 97,
+    1 98
+},
+```
+
+Yep. Makes sense. Here's the issue: messages per operation shoot way up in a
+fully connected topology.
+
+```
+# Default topology
+# Without --nemesis=partition
+
+:net {
+    :servers {
+        :msgs-per-op 278.64365
+    },
+},
+```
+
+I begin to understand the purpose of this challenge: balance. Optimizing for
+a single metric is trivial. Optimizing for multiple metrics requires planning,
+risk identification, and risk acceptance. What failure modes need to be handled?
+What costs are incurred from using the wire more often? What costs are incurred
+from a poor user experience? How many faults can our system handle before it can
+no longer meet the guarantees? How long does the system take to recover? Does
+the recovery require operator intervention?
+
+These are not easy questions to answer. That's what makes this so interesting.
+
+For example, consider a topology where each node has at most two neighbors. This
+is a very good topology if we want to use the wire as little as possible at the
+cost of latency. Also, the topology is really awful at handling partitions since
+there is no network redundancy.
+
+<img src= "./highway.svg">
+
+```
+# Highway topology
+# Without --nemesis=partition
+:net {
+    :servers {
+        :msgs-per-op 11.958559
+    },
+}
+:stable-latencies {
+    0 11,
+    0.5 1522,
+    0.95 2184,
+    0.99 2320,
+    1 2382
+},
+ ```
+
+If considering just latency, the highway topology can be improved by mitigating
+it's worst case scenario. The worst case occurs when a new message is inserted
+into the cluster at either end of the highway; the closer to the "center" node,
+the better the latency because the message can propagate in two directions.
+
+So, we make the highway a ring. No matter where a message begins its journey, it
+will be able to propagate in two directions and take N/2 hops to get to all the
+nodes, where N is the number of nodes.
+
+<img src="./ring.svg">
+
+```
+# Ring topology
+# Without --nemesis=partition
+:net {
+    :servers {
+        :msgs-per-op 13.185623
+    },
+},
+:stable-latencies {
+    0 0,
+    0.5 1039,
+    0.95 1176,
+    0.99 1192,
+    1 1197
+},
+```
+
+Good result, but the latency isn't good enough yet. We can improve the topology
+(still considering just latency) by connecting two sides of the ring. This
+should allow messages to propagate in N/4 hops in the best case: when a message
+arrives at the node that connects to two sides of the ring. The worst case is
+still N/2 and occurs when the message arrives at a node N/4 hops away from the
+"connector" node.
+
+<img src="./1-connector-ring.svg">
+
+```
+# Ring topology with single connector
+# Without --nemesis=partition
+:net {
+    :servers {
+        :msgs-per-op 13.010676
+    },
+},
+:stable-latencies {
+    0 2,
+    0.5 725,
+    0.95 1116,
+    0.99 1183,
+    1 1194
+},
+```
+
+Median latency down 300ms. Just as expected. We can reduce median latency
+further with one more connector. Another connector will also reduce maximum
+latency as too. Think of a circle with an X through it. The worst case now
+occurs when a message is inserted into the cluster at a node that is N/8 hops
+from a connector node.
+
+<img src="./2-connector-ring.svg">
+
+```
+:net {
+    :servers {
+        :msgs-per-op 14.525547
+    },
+},
+:stable-latencies {
+    0 0,
+    0.5 579,
+    0.95 675,
+    0.99 693,
+    1 698
+},
+```
+
+Hmmm. Adding additional conectors won't improve the worst case anymore.
+Interesting. N/8 is as good as it gets with a ring. I want to know why, but
+my graph knowledge is extremely atrophied. I'd need to break out a discrete
+math textbook to be able to formalize this, but it comes down to this:
+additional connectors will not reduce the shortest possible path when a
+message arrives at the worst case node.
+
+A hub node, however, can decrease the hops required in the worst case, but only
+if the ring has eight connectors attached to the hub. A hub with four connectors
+actually increases the worst case hop by one. I wonder if this happens because
+the ring with two connectors is already as efficient as it can be. Hmm...
+
+The worst case path can be defined as the number of hops in the best case plus
+the number of hops required for a worse case insertion to reach a best case
+node.
+
+<img src="./hub.svg">
+
+```
+# Hub-connected node
+# Without --nemesis=partition
+ :net {
+    :servers {
+        :msgs-per-op 19.965397
+    },
+},
+:stable-latencies {
+    0 0,
+    0.5 336,
+    0.95 395,
+    0.99 399,
+    1 402
+},
+```
+
+Mission accomplished. Note that the loss of the hub node will cause the network
+to degenerate into a ring network. A ring network can tolerate the loss of
+two connections before a partition occurs. With the hub node present, subgraphs
+that do not include a connection to the hub can tolerate loss of two connections
+while subgraphs that do contain a connection to the hub can tolerate a loss
+of three connections before a partition occurs. 
+
+This topology also achieves the next efficiency challenge. Awesome!
+
+---
+
+The chordal rings described in "Implementation of Chordal Ring Network Topology
+to Enhance The Performance of Wireless Broadband Network" (Attrah et al. Fig. 7)
+is pretty neat. Achieve the same, or better hop efficiency that a hub connected
+ring can, but with a higher degree of partition tolerance!
+
+This challenge has added a ton of material to my "to read" list. Fun!
+
+I'm curious: could there be an alternative implementation of each node's logic
+that is tailored specifically for a certain type of topology? My implementation
+should work with any topology, but could there be a pair (implementation and
+topology) that increases hop efficiency, provides better latency, and offers
+a robust network? Hmm...
+
+The number of nodes in the network may also play a part in how many connections
+are required.
