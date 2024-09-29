@@ -1,7 +1,7 @@
 FROM golang@sha256:ac67716dd016429be8d4c2c53a248d7bcdf06d34127d3dc451bda6aa5a87bc06 AS build
 WORKDIR /build
 COPY go.mod go.sum ./
-COPY main.go ./
+COPY *.go ./
 RUN go build -a \
     -tags purego \
     -ldflags "-extldflags '-static' -s -w" \
@@ -19,4 +19,8 @@ RUN curl --remote-header-name --location --output maelstrom.tar.bz2 \
     && rm maelstrom.tar.bz2
 WORKDIR /maelstrom
 COPY --from=build /build/node /maelstrom/node
+RUN mkdir -p /root/go/bin/
+RUN ln -s /maelstrom/node /root/go/bin/maelstrom-echo
+RUN ln -s /maelstrom/node /root/go/bin/maelstrom-unique-ids
+RUN ln -s /maelstrom/node /root/go/bin/maelstrom-broadcast 
 CMD [ "./maelstrom" ]
