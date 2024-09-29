@@ -167,7 +167,7 @@ conditions that won't flood the network. In addition, the eventual consistency
 guarantee only works if there is a constant flow of messages. Outstanding
 messages will never make it if the flow of new messages stops!
 
-## Challenge #4c: Efficient Broadcast: Part 1
+## Challenge #3d: Efficient Broadcast: Part 1
 Hmm. I think the maintainers of this website messed up. The next challenge is
 to make the broadcast system faster, but gives higher metrics for success...
 
@@ -492,6 +492,7 @@ math textbook to be able to formalize this, but it comes down to this:
 additional connectors will not reduce the shortest possible path when a
 message arrives at the worst case node.
 
+## Challenge #3e: Efficient Broadcast: Part 2
 A hub node, however, can decrease the hops required in the worst case, but only
 if the ring has eight connectors attached to the hub. A hub with four connectors
 actually increases the worst case hop by one. I wonder if this happens because
