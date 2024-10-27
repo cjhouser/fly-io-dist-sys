@@ -1,4 +1,4 @@
-module maelstrom-echo
+module github.com/cjhouser/fly-io-dist-sys/echo
 
 go 1.22.7
 

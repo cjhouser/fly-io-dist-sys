@@ -151,7 +151,7 @@ Here's the basics of the program
     1. Send the message back to the sender
 1. Delete the sender from the map
 
-<img src="./broadcast.svg">
+<img src="./documentation/broadcast.svg">
 
 The diagram shows the full exchange between two neighbors in the absence of a
 partition. Now, consider partitions at each step where a message is in flight:
@@ -282,7 +282,7 @@ n1 to n0 was lost. The message contained the messages A, B, and C. As you can
 see, node n1 is expecting acknowledgement of a message that n1 already
 acknowledged; the n1 "ack" and n0 "expect" lists don't intersect.
 
-<img src="./broadcast-bad-state.svg">
+<img src="./documentation/broadcast-bad-state.svg">
 
 To recover, a node simply needs to add the unexpected message to the outgoing
 acknowledgements and then wait for the next new message for the acknowledgement
@@ -348,7 +348,7 @@ connected graph. Every node is connected to one another so that broadcasts
 reach all nodes in just one hop.
 
 ```
-# Default topology
+# Fully connected topology
 # Without --nemesis=partition
 
 :stable-latencies {
@@ -364,7 +364,7 @@ Yep. Makes sense. Here's the issue: messages per operation shoot way up in a
 fully connected topology.
 
 ```
-# Default topology
+# Fully connected topology
 # Without --nemesis=partition
 
 :net {
@@ -417,7 +417,7 @@ So, we make the highway a ring. No matter where a message begins its journey, it
 will be able to propagate in two directions and take N/2 hops to get to all the
 nodes, where N is the number of nodes.
 
-<img src="./ring.svg">
+<img src="./documentation/ring.svg">
 
 ```
 # Ring topology
@@ -443,7 +443,7 @@ arrives at the node that connects to two sides of the ring. The worst case is
 still N/2 and occurs when the message arrives at a node N/4 hops away from the
 "connector" node.
 
-<img src="./1-connector-ring.svg">
+<img src="./documentation/1-connector-ring.svg">
 
 ```
 # Ring topology with single connector
@@ -451,7 +451,7 @@ still N/2 and occurs when the message arrives at a node N/4 hops away from the
 :net {
     :servers {
         :msgs-per-op 13.010676
-    },
+    ,
 },
 :stable-latencies {
     0 2,
@@ -468,7 +468,7 @@ latency as too. Think of a circle with an X through it. The worst case now
 occurs when a message is inserted into the cluster at a node that is N/8 hops
 from a connector node.
 
-<img src="./2-connector-ring.svg">
+<img src="./documentation/2-connector-ring.svg">
 
 ```
 :net {
@@ -502,7 +502,7 @@ The worst case path can be defined as the number of hops in the best case plus
 the number of hops required for a worse case insertion to reach a best case
 node.
 
-<img src="./hub.svg">
+<img src="./documentation/hub.svg">
 
 ```
 # Hub-connected node
@@ -547,3 +547,8 @@ a robust network? Hmm...
 
 The number of nodes in the network may also play a part in how many connections
 are required.
+
+# Challenge #4: Grow-Only Counter
+The description of this challenge is a bit confusing, so I'm going to go ahead
+and implement something and run the test.
+
